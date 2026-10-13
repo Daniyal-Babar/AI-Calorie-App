@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: calorie_db
+    restart: always
+    environment:
+      POSTGRES_USER: calorie_user
+      POSTGRES_PASSWORD: calorie_password
+      POSTGRES_DB: calorie_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U calorie_user -d calorie_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: calorie_backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: postgresql://calorie_user:calorie_password@postgres:5432/calorie_db
+      SECRET_KEY: ${SECRET_KEY:-production-super-secret-key-nutrition}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-jwt-token-secret-nutrition}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-flash-lite-latest}
+      FLASK_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: calorie_frontend
+    restart: always
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  uploads_data:
