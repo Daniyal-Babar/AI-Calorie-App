@@ -1,0 +1,96 @@
+.diet-plan-card {
+  margin: 12px 0;
+  padding: 18px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(30, 27, 75, 0.7) 0%, rgba(15, 23, 42, 0.85) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.diet-plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.diet-plan-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diet-plan-icon-box {
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(139, 92, 246, 0.2);
+  color: #c4b5fd;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diet-plan-title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text-main);
+}
+
+.diet-plan-subtitle {
+  font-size: 0.75rem;
+  color: #a78bfa;
+}
+
+.diet-plan-recommendations {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  margin-bottom: 14px;
+  line-height: 1.4;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Slots Breakdown */
+.diet-plan-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diet-slot-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.diet-slot-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.diet-slot-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #f1f5f9;
+}
+
+.diet-slot-calories {
+  font-size: 0.8rem;
+  color: var(--accent-emerald);
+  font-weight: 600;
+}
+
+.diet-slot-list {
+  padding-left: 16px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.diet-slot-list li {
+  margin: 2px 0;
+}

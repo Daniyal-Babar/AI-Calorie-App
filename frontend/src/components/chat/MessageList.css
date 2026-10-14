@@ -1,0 +1,116 @@
+/* Empty State Container */
+.empty-state-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.empty-state-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2));
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-emerald);
+  margin-bottom: 18px;
+  /* box-shadow: var(--shadow-glow); */
+}
+
+.empty-state-title {
+  font-family: var(--font-heading);
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.empty-state-subtitle {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  max-width: 520px;
+  line-height: 1.5;
+  margin-bottom: 28px;
+}
+
+/* Suggested Prompts Grid */
+.suggested-prompts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.prompt-card-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  color: #cbd5e1;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.prompt-card-btn:hover {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.prompt-card-icon {
+  margin-top: 2px;
+}
+
+.prompt-card-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-main);
+}
+
+.prompt-card-text {
+  font-size: 0.78rem;
+  color: var(--text-subtle);
+  margin-top: 2px;
+}
+
+/* Chat Message List Container */
+.message-list-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 0;
+}
+
+/* Streaming Status Indicator */
+.streaming-indicator-wrapper {
+  max-width: 850px;
+  margin: 0 auto 16px auto;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.streaming-badge {
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--accent-emerald);
+  font-size: 0.8rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: pulseGlow 1.5s infinite ease-in-out;
+}

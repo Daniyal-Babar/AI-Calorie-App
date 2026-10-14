@@ -1,0 +1,118 @@
+.meal-card {
+  margin: 12px 0;
+  padding: 16px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.7) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.meal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.meal-card-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meal-card-icon-box {
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--accent-emerald);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meal-card-title {
+  font-weight: 600;
+  font-size: 1rem;
+  text-transform: capitalize;
+  color: var(--text-main);
+}
+
+.meal-card-calories-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: var(--radius-full);
+  color: var(--accent-emerald);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+/* Item List */
+.meal-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.meal-item-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.meal-item-name {
+  color: #e2e8f0;
+}
+
+.meal-item-calories {
+  color: var(--accent-emerald);
+  font-weight: 500;
+}
+
+/* Macronutrient Pills */
+.meal-macros-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.meal-macro-pill {
+  text-align: center;
+  padding: 6px;
+  border-radius: 8px;
+}
+
+.meal-macro-pill.protein { background: rgba(6, 182, 212, 0.1); }
+.meal-macro-pill.carbs { background: rgba(245, 158, 11, 0.1); }
+.meal-macro-pill.fat { background: rgba(244, 63, 94, 0.1); }
+
+.meal-macro-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.meal-macro-pill.protein .meal-macro-label { color: var(--accent-cyan); }
+.meal-macro-pill.carbs .meal-macro-label { color: var(--accent-amber); }
+.meal-macro-pill.fat .meal-macro-label { color: var(--accent-rose); }
+
+.meal-macro-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.meal-macro-pill.protein .meal-macro-value { color: #e0f2fe; }
+.meal-macro-pill.carbs .meal-macro-value { color: #fef3c7; }
+.meal-macro-pill.fat .meal-macro-value { color: #ffe4e6; }
