@@ -30,11 +30,19 @@ class Config:
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16 MB max upload
     ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
     
+    # LLM Provider configuration: 'gemini' or 'ollama'
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").lower()
+
     # Gemini LLM configuration
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
     GEMINI_API_BASE = os.getenv("GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta/openai/")
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
     GEMINI_VISION_MODEL = os.getenv("GEMINI_VISION_MODEL", "gemini-flash-lite-latest")
+
+    # Local Ollama configuration
+    OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:4b")
+
     AGENT_MAX_ITERATIONS = int(os.getenv("AGENT_MAX_ITERATIONS", "5"))
     
     # Rate Limiting

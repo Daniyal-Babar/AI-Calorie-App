@@ -96,7 +96,7 @@ export function Composer({ onSend, disabled }) {
         {/* Attach photo button */}
         <button
           type="button"
-          // onClick={() => fileInputRef.current?.click()}
+          onClick={() => fileInputRef.current?.click()}
           title="Attach meal photo"
           className={`composer-attach-btn ${selectedFile ? 'has-file' : 'no-file'}`}
         >

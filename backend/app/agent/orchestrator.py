@@ -96,7 +96,7 @@ class AgentOrchestrator:
                 final_assistant_text = llm_resp.content or ""
                 break
 
-            # Process requested tool calls
+            iteration_tool_results = []
             for tc in llm_resp.tool_calls:
                 func_name = tc["function"]["name"]
                 args_str = tc["function"]["arguments"]
@@ -111,6 +111,7 @@ class AgentOrchestrator:
                 result = dispatch_tool_call(func_name, self.user.id, args)
                 all_tool_calls_executed.append(tc)
                 all_tool_results.append({"tool_call_id": tc.get("id", ""), "name": func_name, "result": result})
+                iteration_tool_results.append({"tool_call_id": tc.get("id", ""), "name": func_name, "result": result})
 
                 yield f"data: {json.dumps({'event': 'tool_result', 'tool': func_name, 'result': result})}\n\n"
 
@@ -123,16 +124,16 @@ class AgentOrchestrator:
                 if result.get("status") == "pending_confirmation":
                     pending_action_record = result.get("pending_action")
 
-                # Append assistant tool call message and tool result message to prompt context
-                messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [tc],
-                })
+            # Append assistant tool_calls and each tool result to prompt context
+            messages.append({
+                "role": "assistant",
+                "tool_calls": llm_resp.tool_calls,
+            })
+            for tc, tr in zip(llm_resp.tool_calls, iteration_tool_results):
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc.get("id", "call_0"),
-                    "content": json.dumps(result),
+                    "content": json.dumps(tr["result"]),
                 })
 
         # Final explanation token stream / generation

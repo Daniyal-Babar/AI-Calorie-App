@@ -11,24 +11,47 @@ class LLMResponse:
         self.tool_calls = tool_calls or []
 
 class LLMClient:
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, base_url: Optional[str] = None):
-        self.api_key = (
-            api_key
-            or current_app.config.get("GEMINI_API_KEY", "")
-            or current_app.config.get("OPENAI_API_KEY", "")
-        )
-        self.base_url = base_url or current_app.config.get(
-            "GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta/openai/"
-        )
-        self.model = model or current_app.config.get("GEMINI_MODEL", "gemini-flash-lite-latest")
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+        provider: Optional[str] = None,
+    ):
+        self.provider = (
+            provider
+            or current_app.config.get("LLM_PROVIDER", "gemini")
+        ).lower()
+
+        if self.provider == "ollama":
+            self.api_key = api_key or "ollama"
+            self.base_url = base_url or current_app.config.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+            self.model = model or current_app.config.get("OLLAMA_MODEL", "gemma3:4b")
+        else:
+            self.api_key = (
+                api_key
+                or current_app.config.get("GEMINI_API_KEY", "")
+                or current_app.config.get("OPENAI_API_KEY", "")
+            )
+            self.base_url = base_url or current_app.config.get(
+                "GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta/openai/"
+            )
+            self.model = model or current_app.config.get("GEMINI_MODEL", "gemini-flash-lite-latest")
+
         self._client = None
 
-        if self.api_key and not self.api_key.startswith("sk-placeholder") and len(self.api_key) > 10:
+        # Initialize client for Ollama or valid Gemini key
+        should_init = (
+            self.provider == "ollama"
+            or (self.api_key and not self.api_key.startswith("sk-placeholder") and len(self.api_key) > 10)
+        )
+
+        if should_init:
             try:
                 from openai import OpenAI
                 self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
             except Exception as e:
-                logger.warning(f"Could not initialize Gemini client: {e}. Falling back to smart offline mode.")
+                logger.warning(f"Could not initialize {self.provider} client: {e}. Falling back to smart offline mode.")
 
     def is_live(self) -> bool:
         return self._client is not None
@@ -49,20 +72,34 @@ class LLMClient:
                     kwargs["tools"] = tools
                     kwargs["tool_choice"] = "auto"
 
-                response = self._client.chat.completions.create(**kwargs)
+                try:
+                    response = self._client.chat.completions.create(**kwargs)
+                except Exception as call_err:
+                    err_msg = str(call_err).lower()
+                    if "does not support tools" in err_msg and "tools" in kwargs:
+                        logger.warning(f"Model '{self.model}' does not support tools. Retrying without tools.")
+                        kwargs.pop("tools", None)
+                        kwargs.pop("tool_choice", None)
+                        response = self._client.chat.completions.create(**kwargs)
+                    else:
+                        raise call_err
+
                 choice = response.choices[0].message
 
                 parsed_tool_calls = []
                 if choice.tool_calls:
                     for tc in choice.tool_calls:
-                        parsed_tool_calls.append({
+                        call_dict = {
                             "id": tc.id,
                             "type": "function",
                             "function": {
                                 "name": tc.function.name,
                                 "arguments": tc.function.arguments,
                             },
-                        })
+                        }
+                        if hasattr(tc, "extra_content") and tc.extra_content:
+                            call_dict["extra_content"] = tc.extra_content
+                        parsed_tool_calls.append(call_dict)
 
                 return LLMResponse(content=choice.content, tool_calls=parsed_tool_calls)
             except Exception as e:
@@ -88,7 +125,17 @@ class LLMClient:
                     kwargs["tools"] = tools
                     kwargs["tool_choice"] = "auto"
 
-                stream = self._client.chat.completions.create(**kwargs)
+                try:
+                    stream = self._client.chat.completions.create(**kwargs)
+                except Exception as call_err:
+                    err_msg = str(call_err).lower()
+                    if "does not support tools" in err_msg and "tools" in kwargs:
+                        logger.warning(f"Model '{self.model}' does not support tools. Retrying streaming without tools.")
+                        kwargs.pop("tools", None)
+                        kwargs.pop("tool_choice", None)
+                        stream = self._client.chat.completions.create(**kwargs)
+                    else:
+                        raise call_err
 
                 accumulated_tool_calls = {}
                 for chunk in stream:
@@ -118,17 +165,23 @@ class LLMClient:
                                 if tc.function.arguments:
                                     accumulated_tool_calls[idx]["arguments"] += tc.function.arguments
 
+                            if hasattr(tc, "extra_content") and tc.extra_content:
+                                accumulated_tool_calls[idx]["extra_content"] = tc.extra_content
+
                 if accumulated_tool_calls:
                     formatted = []
                     for idx, tc_data in accumulated_tool_calls.items():
-                        formatted.append({
+                        call_dict = {
                             "id": tc_data["id"],
                             "type": "function",
                             "function": {
                                 "name": tc_data["name"],
                                 "arguments": tc_data["arguments"],
                             },
-                        })
+                        }
+                        if "extra_content" in tc_data:
+                            call_dict["extra_content"] = tc_data["extra_content"]
+                        formatted.append(call_dict)
                     yield {"type": "tool_calls", "tool_calls": formatted}
                 return
 
