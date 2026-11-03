@@ -75,6 +75,8 @@ export async function streamChatMessage({
               onToken(payload.token);
             } else if (payload.event === 'done' && onDone) {
               onDone(payload);
+            } else if (payload.event === 'error' && onError) {
+              onError(new Error(payload.error || 'Server error occurred'));
             }
           } catch (e) {
             console.error('SSE JSON parse error:', e, trimmed);

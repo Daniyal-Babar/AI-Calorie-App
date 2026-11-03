@@ -7,6 +7,26 @@ import { ConfirmButtons } from './ConfirmButtons';
 import { API_BASE } from '../../api/client';
 import './MessageBubble.css';
 
+function sanitizeMessageText(text) {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    // Remove tool_code and code fences
+    .replace(/```(?:tool_code|python|json)?[\s\S]*?```/gi, '')
+    // Remove standalone function calls like get_daily_summary()
+    .replace(/\b(?:get_daily_summary|log_meal|edit_meal|delete_meal|analyze_meal|get_weekly_report|set_calorie_goal|update_profile|generate_diet_plan|set_reminder)\([^)]*\)/g, '')
+    // Replace **bold** with bold content
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    // Replace *italic* with italic content
+    .replace(/\*([^*]+)\*/g, '$1')
+    // Convert list asterisks to clean bullets
+    .replace(/^[ \t]*\*[ \t]+/gm, '• ')
+    // Remove stray asterisks
+    .replace(/\*/g, '')
+    // Normalize excessive newlines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function MessageBubble({ message, onConfirm }) {
   const isUser = message.role === 'user';
   const blocks = message.blocks || [];
@@ -37,9 +57,11 @@ export function MessageBubble({ message, onConfirm }) {
           {blocks.length > 0 ? (
             blocks.map((block, index) => {
               if (block.type === 'text') {
+                const cleanedContent = isUser ? block.content : sanitizeMessageText(block.content);
+                if (!cleanedContent) return null;
                 return (
                   <p key={index} className="message-text-block">
-                    {block.content}
+                    {cleanedContent}
                   </p>
                 );
               }
@@ -59,7 +81,7 @@ export function MessageBubble({ message, onConfirm }) {
             })
           ) : (
             <p className="message-text-block plain">
-              {message.content}
+              {isUser ? message.content : sanitizeMessageText(message.content)}
             </p>
           )}
 

@@ -1,9 +1,27 @@
 import json
 import logging
-from typing import List, Dict, Any, Generator, Optional
+from typing import List, Dict, Any, Generator, Optional, Tuple
 from flask import current_app
 
 logger = logging.getLogger(__name__)
+
+def parse_tool_arguments(args_val: Any) -> Tuple[bool, Dict[str, Any], Optional[str]]:
+    """Safely parse tool call arguments into a dict.
+    Returns (is_valid, parsed_dict, error_message).
+    """
+    if isinstance(args_val, dict):
+        return True, args_val, None
+    if not args_val:
+        return True, {}, None
+    if isinstance(args_val, str):
+        try:
+            parsed = json.loads(args_val)
+            if isinstance(parsed, dict):
+                return True, parsed, None
+            return False, {}, f"Expected JSON object for arguments, got {type(parsed).__name__}"
+        except Exception as e:
+            return False, {}, f"Malformed JSON in tool arguments: {str(e)}"
+    return False, {}, f"Unsupported arguments type: {type(args_val).__name__}"
 
 class LLMResponse:
     def __init__(self, content: Optional[str] = None, tool_calls: Optional[List[Dict[str, Any]]] = None):
@@ -20,23 +38,23 @@ class LLMClient:
     ):
         self.provider = (
             provider
-            or current_app.config.get("LLM_PROVIDER", "gemini")
+            or (current_app.config.get("LLM_PROVIDER", "gemini") if current_app else "gemini")
         ).lower()
 
         if self.provider == "ollama":
             self.api_key = api_key or "ollama"
-            self.base_url = base_url or current_app.config.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-            self.model = model or current_app.config.get("OLLAMA_MODEL", "gemma3:4b")
+            self.base_url = base_url or (current_app.config.get("OLLAMA_BASE_URL", "http://localhost:11434/v1") if current_app else "http://localhost:11434/v1")
+            self.model = model or (current_app.config.get("OLLAMA_MODEL", "gemma3:4b-tools") if current_app else "gemma3:4b-tools")
         else:
             self.api_key = (
                 api_key
-                or current_app.config.get("GEMINI_API_KEY", "")
-                or current_app.config.get("OPENAI_API_KEY", "")
+                or (current_app.config.get("GEMINI_API_KEY", "") if current_app else "")
+                or (current_app.config.get("OPENAI_API_KEY", "") if current_app else "")
             )
-            self.base_url = base_url or current_app.config.get(
+            self.base_url = base_url or (current_app.config.get(
                 "GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta/openai/"
-            )
-            self.model = model or current_app.config.get("GEMINI_MODEL", "gemini-flash-lite-latest")
+            ) if current_app else "https://generativelanguage.googleapis.com/v1beta/openai/")
+            self.model = model or (current_app.config.get("GEMINI_MODEL", "gemini-flash-lite-latest") if current_app else "gemini-flash-lite-latest")
 
         self._client = None
 
@@ -50,8 +68,10 @@ class LLMClient:
             try:
                 from openai import OpenAI
                 self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+                logger.info("Initialized LLMClient [provider=%s, model=%s, base_url=%s]", self.provider, self.model, self.base_url)
             except Exception as e:
-                logger.warning(f"Could not initialize {self.provider} client: {e}. Falling back to smart offline mode.")
+                logger.error("Could not initialize %s client: %s", self.provider, e, exc_info=True)
+                raise
 
     def is_live(self) -> bool:
         return self._client is not None
@@ -76,25 +96,23 @@ class LLMClient:
                     response = self._client.chat.completions.create(**kwargs)
                 except Exception as call_err:
                     err_msg = str(call_err).lower()
-                    if "does not support tools" in err_msg and "tools" in kwargs:
-                        logger.warning(f"Model '{self.model}' does not support tools. Retrying without tools.")
-                        kwargs.pop("tools", None)
-                        kwargs.pop("tool_choice", None)
-                        response = self._client.chat.completions.create(**kwargs)
-                    else:
-                        raise call_err
+                    if "does not support tools" in err_msg:
+                        logger.error("Model '%s' does not support tools.", self.model)
+                        raise RuntimeError(f"Model '{self.model}' does not support tools.") from call_err
+                    raise call_err
 
                 choice = response.choices[0].message
 
                 parsed_tool_calls = []
                 if choice.tool_calls:
                     for tc in choice.tool_calls:
+                        args_str = tc.function.arguments if hasattr(tc.function, "arguments") else ""
                         call_dict = {
-                            "id": tc.id,
+                            "id": tc.id or f"call_{len(parsed_tool_calls)}",
                             "type": "function",
                             "function": {
                                 "name": tc.function.name,
-                                "arguments": tc.function.arguments,
+                                "arguments": args_str,
                             },
                         }
                         if hasattr(tc, "extra_content") and tc.extra_content:
@@ -103,9 +121,16 @@ class LLMClient:
 
                 return LLMResponse(content=choice.content, tool_calls=parsed_tool_calls)
             except Exception as e:
-                logger.error(f"Gemini API call failed: {e}. Using intelligent fallback.")
-                return self._simulate_smart_fallback(messages, tools)
+                logger.error(
+                    "LLM API call failed [provider=%s, model=%s]: %s",
+                    self.provider,
+                    self.model,
+                    e,
+                    exc_info=True,
+                )
+                raise
 
+        # Offline fallback only when client was intentionally not initialized
         return self._simulate_smart_fallback(messages, tools)
 
     def stream_chat_completion(
@@ -129,13 +154,10 @@ class LLMClient:
                     stream = self._client.chat.completions.create(**kwargs)
                 except Exception as call_err:
                     err_msg = str(call_err).lower()
-                    if "does not support tools" in err_msg and "tools" in kwargs:
-                        logger.warning(f"Model '{self.model}' does not support tools. Retrying streaming without tools.")
-                        kwargs.pop("tools", None)
-                        kwargs.pop("tool_choice", None)
-                        stream = self._client.chat.completions.create(**kwargs)
-                    else:
-                        raise call_err
+                    if "does not support tools" in err_msg:
+                        logger.error("Model '%s' does not support tools during streaming.", self.model)
+                        raise RuntimeError(f"Model '{self.model}' does not support tools.") from call_err
+                    raise call_err
 
                 accumulated_tool_calls = {}
                 for chunk in stream:
@@ -154,7 +176,7 @@ class LLMClient:
                             if idx not in accumulated_tool_calls:
                                 accumulated_tool_calls[idx] = {
                                     "id": tc.id or f"call_{idx}",
-                                    "name": tc.function.name if tc.function and tc.function.name else "",
+                                    "name": "",
                                     "arguments": "",
                                 }
                             if tc.id:
@@ -186,9 +208,14 @@ class LLMClient:
                 return
 
             except Exception as e:
-                logger.error(f"Streaming error with Gemini: {e}. Yielding fallback.")
-                yield from self._stream_smart_fallback(messages, tools)
-                return
+                logger.error(
+                    "Streaming error with LLM [provider=%s, model=%s]: %s",
+                    self.provider,
+                    self.model,
+                    e,
+                    exc_info=True,
+                )
+                raise
 
         yield from self._stream_smart_fallback(messages, tools)
 
@@ -196,6 +223,21 @@ class LLMClient:
         self, messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]] = None
     ) -> LLMResponse:
         """Intelligent offline heuristic agent for testing without requiring an active Gemini key."""
+        if not tools:
+            tool_msg = next((m for m in reversed(messages) if m.get("role") == "tool"), None)
+            if tool_msg:
+                try:
+                    res = json.loads(tool_msg.get("content", "{}"))
+                    msg = res.get("message")
+                    if msg:
+                        return LLMResponse(content=msg, tool_calls=[])
+                except Exception:
+                    pass
+            return LLMResponse(
+                content="I have processed your request and updated your nutrition records.",
+                tool_calls=[],
+            )
+
         last_user_msg = ""
         for m in reversed(messages):
             if m.get("role") == "user":
@@ -286,7 +328,14 @@ class LLMClient:
             # Parse rough foods
             items = []
             if "egg" in msg_lower:
-                items.append({"name": "Scrambled Eggs", "quantity": 2, "unit": "large eggs", "calories": 156, "protein_g": 12.6, "carbs_g": 1.2, "fat_g": 10.6})
+                qty = 1 if "1 " in msg_lower or "one " in msg_lower else 2
+                name = "Boiled Egg" if "boiled" in msg_lower else "Egg"
+                unit = "large egg" if qty == 1 else "large eggs"
+                cal = 78 * qty
+                protein = round(6.3 * qty, 1)
+                carbs = round(0.6 * qty, 1)
+                fat = round(5.3 * qty, 1)
+                items.append({"name": name, "quantity": qty, "unit": unit, "calories": cal, "protein_g": protein, "carbs_g": carbs, "fat_g": fat})
             if "chicken" in msg_lower:
                 items.append({"name": "Grilled Chicken Breast", "quantity": 150, "unit": "g", "calories": 248, "protein_g": 46.5, "carbs_g": 0, "fat_g": 5.4})
             if "rice" in msg_lower:

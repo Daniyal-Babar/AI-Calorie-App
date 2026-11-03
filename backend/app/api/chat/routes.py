@@ -38,7 +38,7 @@ def send_chat_message():
 
     image_path = None
     if validated.image_id:
-        image_path = UploadService.get_file_path(validated.image_id)
+        image_path = UploadService.get_file_path(validated.image_id, user_id=user.id)
 
     stream = orchestrator.process_message_stream(
         user_message_text=validated.message,

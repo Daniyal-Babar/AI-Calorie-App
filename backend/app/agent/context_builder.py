@@ -1,9 +1,11 @@
-from typing import List, Dict, Any, Tuple
+import json
+from typing import List, Dict, Any, Tuple, Optional
 from datetime import datetime, timezone
 from app.models.user import User
 from app.models.conversation import Conversation, Message
 from app.services.calorie_service import CalorieService
 from app.services.diet_service import DietService
+from app.services.upload_service import UploadService
 from app.agent.prompts.system import get_system_prompt
 
 class ContextBuilder:
@@ -14,9 +16,10 @@ class ContextBuilder:
         current_user_message: str,
         image_url: str | None = None,
         max_history: int = 10,
+        exclude_message_id: Optional[int] = None,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
-        """Build the complete messages array for the LLM request."""
-        # 1. Profile and Daily Snapshot
+        """Build the complete messages array for the LLM request adhering to OpenAI/Ollama standards."""
+        # 1. Profile and Daily Snapshot using consistent UTC date
         today = datetime.now(timezone.utc).date()
         daily_summary = CalorieService.get_daily_summary(user.id, today)
         tdee = CalorieService.calculate_tdee(user)
@@ -48,14 +51,17 @@ class ContextBuilder:
 
         full_system_content = f"{system_instruction}\n\n" + "\n".join(snapshot_lines)
 
-        messages = [
+        messages: List[Dict[str, Any]] = [
             {"role": "system", "content": full_system_content}
         ]
 
-        # 2. Add last N conversation messages
+        # 2. Add last N conversation messages, excluding the current pending user message to prevent duplication
+        query = Message.query.filter(Message.conversation_id == conversation.id)
+        if exclude_message_id is not None:
+            query = query.filter(Message.id != exclude_message_id)
+
         recent_msgs = (
-            Message.query.filter_by(conversation_id=conversation.id)
-            .order_by(Message.created_at.desc())
+            query.order_by(Message.created_at.desc())
             .limit(max_history)
             .all()
         )
@@ -63,18 +69,44 @@ class ContextBuilder:
 
         for m in recent_msgs:
             if m.role == "user":
-                messages.append({"role": "user", "content": m.content or ""})
+                if m.image_id:
+                    img_path = UploadService.get_file_path(m.image_id, user_id=user.id)
+                    if img_path:
+                        messages.append({
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": m.content or "Uploaded food photo."},
+                                {"type": "image_url", "image_url": {"url": img_path}},
+                            ],
+                        })
+                    else:
+                        messages.append({"role": "user", "content": m.content or ""})
+                else:
+                    messages.append({"role": "user", "content": m.content or ""})
+
             elif m.role == "assistant":
-                msg_dict = {"role": "assistant", "content": m.content or ""}
-                if m.tool_calls:
-                    msg_dict["tool_calls"] = m.tool_calls
-                messages.append(msg_dict)
-            elif m.role == "tool":
-                messages.append({
-                    "role": "tool",
-                    "content": m.content or "",
-                    "tool_call_id": m.tool_calls[0]["id"] if m.tool_calls else "tool_0",
-                })
+                # Ensure tool_calls and tool results are reconstructed in complete pairs
+                if m.tool_calls and m.tool_results:
+                    results_by_id = {
+                        tr.get("tool_call_id"): tr.get("result")
+                        for tr in m.tool_results
+                        if tr.get("tool_call_id")
+                    }
+                    messages.append({
+                        "role": "assistant",
+                        "content": m.content or "",
+                        "tool_calls": m.tool_calls,
+                    })
+                    for tc in m.tool_calls:
+                        tc_id = tc.get("id")
+                        tr_result = results_by_id.get(tc_id, {"status": "success"})
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc_id or "call_0",
+                            "content": json.dumps(tr_result),
+                        })
+                else:
+                    messages.append({"role": "assistant", "content": m.content or ""})
 
         # 3. Append current user message (with optional image)
         if image_url:
@@ -93,5 +125,7 @@ class ContextBuilder:
             "missing_fields": missing_fields,
             "has_active_plan": bool(active_plan),
         }
+
+        return messages, snapshot_meta
 
         return messages, snapshot_meta

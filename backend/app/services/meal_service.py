@@ -63,11 +63,7 @@ class MealService:
             meal.notes = notes
 
         if items is not None:
-            # Delete existing items and add new ones
-            for old_item in meal.items:
-                db.session.delete(old_item)
-            db.session.flush()
-
+            meal.items.clear()
             for item_data in items:
                 new_item = MealItem(
                     meal_id=meal.id,
@@ -79,7 +75,7 @@ class MealService:
                     carbs_g=float(item_data.get("carbs_g", 0.0)),
                     fat_g=float(item_data.get("fat_g", 0.0)),
                 )
-                db.session.add(new_item)
+                meal.items.append(new_item)
 
         db.session.commit()
         return meal

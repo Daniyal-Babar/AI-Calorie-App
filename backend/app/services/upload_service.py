@@ -37,12 +37,15 @@ class UploadService:
         }
 
     @staticmethod
-    def get_file_path(image_id: str) -> str | None:
-        """Find the file corresponding to image_id in upload folder."""
+    def get_file_path(image_id: str, user_id: int | None = None) -> str | None:
+        """Find the file corresponding to image_id in upload folder, optionally validating user ownership."""
+        if not image_id:
+            return None
         upload_folder = Path(current_app.config["UPLOAD_FOLDER"])
         if not upload_folder.exists():
             return None
 
-        for file_path in upload_folder.glob(f"{image_id}*"):
+        pattern = f"{image_id}_{user_id}.*" if user_id is not None else f"{image_id}*"
+        for file_path in upload_folder.glob(pattern):
             return str(file_path)
         return None

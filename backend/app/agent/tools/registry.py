@@ -1,3 +1,4 @@
+import logging
 from typing import Dict, Any, Callable
 from app.agent.tools.meal_tools import (
     tool_analyze_meal,
@@ -16,12 +17,14 @@ from app.agent.tools.profile_tools import tool_get_profile, tool_update_profile
 from app.agent.tools.diet_tools import tool_generate_diet_plan, tool_get_active_plan
 from app.agent.tools.reminder_tools import tool_set_reminder, tool_list_reminders
 
+logger = logging.getLogger(__name__)
+
 TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
             "name": "analyze_meal",
-            "description": "Analyze food description or photo to inspect ingredients and macronutrients before logging.",
+            "description": "Analyze food description or photo to inspect ingredients and macronutrients without saving to the database. Use this when the user asks how many calories or nutrients are in a food, or to estimate nutrition before logging.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -41,23 +44,23 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "log_meal",
-            "description": "Log a meal with its itemized ingredients and macro values directly into the database.",
+            "description": "Log a meal with its itemized ingredients and macro values directly into the database. Use this ONLY when the user explicitly requests to log, record, or track a meal they ate.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "meal_type": {
                         "type": "string",
                         "enum": ["breakfast", "lunch", "dinner", "snack"],
-                        "description": "Type of meal",
+                        "description": "Type of meal: breakfast, lunch, dinner, or snack",
                     },
                     "items": {
                         "type": "array",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "name": {"type": "string", "description": "Item name, e.g. 'Avocado Toast'"},
-                                "quantity": {"type": "number", "description": "Portion quantity"},
-                                "unit": {"type": "string", "description": "Portion unit, e.g. 'slice', 'cup', 'g'"},
+                                "name": {"type": "string", "description": "Item name, e.g. 'Boiled Egg'"},
+                                "quantity": {"type": "number", "description": "Portion quantity, e.g. 1.0"},
+                                "unit": {"type": "string", "description": "Portion unit, e.g. 'large egg', 'serving', 'g'"},
                                 "calories": {"type": "number", "description": "Calories in kcal"},
                                 "protein_g": {"type": "number", "description": "Protein in grams"},
                                 "carbs_g": {"type": "number", "description": "Carbs in grams"},
@@ -78,11 +81,11 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "edit_meal",
-            "description": "Edit or update an existing meal record.",
+            "description": "Edit or update an existing meal record in the database. Requires a valid meal_id.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "meal_id": {"type": "integer", "description": "Meal ID to edit"},
+                    "meal_id": {"type": "integer", "description": "Existing meal ID to edit"},
                     "meal_type": {"type": "string", "enum": ["breakfast", "lunch", "dinner", "snack"]},
                     "items": {
                         "type": "array",
@@ -110,7 +113,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "delete_meal",
-            "description": "Request deletion of a logged meal. Prompts user confirmation before execution.",
+            "description": "Request deletion of a logged meal. Generates a confirmation request for the user before permanent removal.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -124,7 +127,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_daily_summary",
-            "description": "Get today's (or a specified date's) consumed calories, macros, and remaining allowance.",
+            "description": "Get today's (or a specified date's) consumed calories, macros, target comparison, and remaining allowance.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -137,7 +140,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_history",
-            "description": "Retrieve recent logged meals list.",
+            "description": "Retrieve recent logged meals list for the user.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -150,7 +153,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_weekly_report",
-            "description": "Get past 7 days average calories, trends, and adherence report.",
+            "description": "Get past 7 days average calories, intake trends, and adherence report.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -158,11 +161,11 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "set_calorie_goal",
-            "description": "Set the user's daily calorie target and optional macronutrient goals.",
+            "description": "Set or update the user's daily calorie target and optional macronutrient goals.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "calorie_target": {"type": "number", "description": "Target daily calories in kcal"},
+                    "calorie_target": {"type": "number", "description": "Target daily calories in kcal (e.g. 2000)"},
                     "protein_g": {"type": "number", "description": "Target protein in grams"},
                     "carbs_g": {"type": "number", "description": "Target carbs in grams"},
                     "fat_g": {"type": "number", "description": "Target fat in grams"},
@@ -175,7 +178,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_profile",
-            "description": "Retrieve user profile, biometrics, BMR, and TDEE.",
+            "description": "Retrieve user profile, biometrics, calculated BMR, and TDEE.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -212,11 +215,13 @@ TOOL_DEFINITIONS = [
                     "goal_type": {
                         "type": "string",
                         "enum": ["weight_loss", "muscle_gain", "maintenance", "keto"],
+                        "description": "Fitness/diet goal type",
                     },
-                    "target_daily_calories": {"type": "number"},
-                    "duration_weeks": {"type": "integer"},
-                    "dietary_preferences": {"type": "string"},
+                    "target_daily_calories": {"type": "number", "description": "Target daily calories in kcal"},
+                    "duration_weeks": {"type": "integer", "description": "Plan duration in weeks (default 4)"},
+                    "dietary_preferences": {"type": "string", "description": "Preferences, e.g. 'high protein, vegetarian'"},
                 },
+                "required": ["goal_type"],
             },
         },
     },
@@ -224,7 +229,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_active_plan",
-            "description": "Retrieve the user's active diet plan.",
+            "description": "Retrieve the user's currently active diet plan.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -232,7 +237,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "set_reminder",
-            "description": "Set a daily reminder nudge to log meals.",
+            "description": "Set a daily recurring reminder nudge to log meals.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -275,6 +280,7 @@ def dispatch_tool_call(tool_name: str, user_id: int, arguments: Dict[str, Any]) 
     """Execute the tool function injecting the authenticated user_id server-side."""
     func = TOOL_DISPATCHER.get(tool_name)
     if not func:
+        logger.warning("Unrecognized tool called: %s by user %s", tool_name, user_id)
         return {"status": "error", "message": f"Tool '{tool_name}' is not recognized."}
 
     # CRITICAL SECURITY RULE: inject user_id server-side; strip any user_id from arguments
@@ -282,6 +288,12 @@ def dispatch_tool_call(tool_name: str, user_id: int, arguments: Dict[str, Any]) 
     cleaned_args.pop("user_id", None)
 
     try:
-        return func(user_id=user_id, **cleaned_args)
+        result = func(user_id=user_id, **cleaned_args)
+        if not isinstance(result, dict):
+            return {"status": "success", "data": result, "message": "Tool executed successfully."}
+        if "status" not in result:
+            result["status"] = "success"
+        return result
     except Exception as e:
+        logger.exception("Error executing tool '%s' for user %s: %s", tool_name, user_id, e)
         return {"status": "error", "message": f"Tool execution error: {str(e)}"}
